@@ -4,7 +4,30 @@ from keras.models import load_model
 import time
 import os
 from stream import start_stream, stop_stream
-from settings import start_delay,stop_delay,cam,channel 
+from settings import start_delay,stop_delay,cam 
+
+import google_auth_oauthlib.flow
+import googleapiclient.discovery
+import googleapiclient.errors
+
+scopes = ["https://www.googleapis.com/auth/youtube.force-ssl"]
+
+
+
+# Disable OAuthlib's HTTPS verification when running locally.
+# *DO NOT* leave this option enabled in production.
+os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "0"
+
+api_service_name = "youtube"
+api_version = "v3"
+client_secrets_file = "code.json"
+
+# Get credentials and create an API client
+flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
+    client_secrets_file, scopes)
+credentials = flow.run_local_server()
+youtube = googleapiclient.discovery.build(
+    api_service_name, api_version, credentials=credentials)
 
 # Load the model
 model = load_model('./keras_model.h5')
@@ -14,7 +37,7 @@ model = load_model('./keras_model.h5')
 RTSP_URL = cam
 os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;udp'
 
-#camera = cv2.VideoCapture(RTSP_URL, cv2.CAP_FFMPEG)
+camera = cv2.VideoCapture(RTSP_URL, cv2.CAP_FFMPEG)
 
 camera = cv2.VideoCapture(1)
 
@@ -56,7 +79,7 @@ while True:
                     print("body present live stream begin")
                     flag = "streaming"
                     pos_count=0
-                    ID = start_stream(cam,channel)
+                    ID = start_stream(cam,youtube)
                 else:
                     pos_count=pos_count+1
                     print(pos_count)
@@ -65,11 +88,11 @@ while True:
                 pos_count=0
 
             elif (np.argmax(probabilities) == 0 and flag=="streaming") :
-                if (neg_count >= 10) :
+                if (neg_count >= stop_delay) :
                     print("body absent stop stream")
                     flag = "pause"
                     neg_count=0
-                    ok = stop_stream(ID)
+                    ok = stop_stream(youtube,ID)
 
                 else:
                     neg_count=neg_count+1
@@ -84,7 +107,7 @@ while True:
         if keyboard_input == 27:
             break
     except Exception as e:
-        pass
+        print(e)
 
 camera.release()
 cv2.destroyAllWindows()
